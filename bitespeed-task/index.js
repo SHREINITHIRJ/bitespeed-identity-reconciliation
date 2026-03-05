@@ -16,7 +16,8 @@ app.post("/identify", async (req, res) => {
         { email: email || undefined },
         { phoneNumber: phoneNumber || undefined }
       ]
-    }
+    },
+    orderBy: { createdAt: "asc" }
   });
 
   if (contacts.length === 0) {
@@ -38,11 +39,31 @@ app.post("/identify", async (req, res) => {
     });
   }
 
-  const primary = contacts.find(c => c.linkPrecedence === "primary") || contacts[0];
+  let primary = contacts.find(c => c.linkPrecedence === "primary") || contacts[0];
 
-  const emails = [...new Set(contacts.map(c => c.email).filter(Boolean))];
-  const phones = [...new Set(contacts.map(c => c.phoneNumber).filter(Boolean))];
-  const secondaryIds = contacts
+  if (!contacts.some(c => c.email === email && c.phoneNumber === phoneNumber)) {
+    await prisma.contact.create({
+      data: {
+        email,
+        phoneNumber,
+        linkedId: primary.id,
+        linkPrecedence: "secondary"
+      }
+    });
+  }
+
+  const allContacts = await prisma.contact.findMany({
+    where: {
+      OR: [
+        { id: primary.id },
+        { linkedId: primary.id }
+      ]
+    }
+  });
+
+  const emails = [...new Set(allContacts.map(c => c.email).filter(Boolean))];
+  const phones = [...new Set(allContacts.map(c => c.phoneNumber).filter(Boolean))];
+  const secondaryIds = allContacts
     .filter(c => c.linkPrecedence === "secondary")
     .map(c => c.id);
 
